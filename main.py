@@ -1421,8 +1421,8 @@ def validate_cta_for_render(call_to_action: str) -> None:
         raise HTTPException(
             status_code=400,
             detail={
-                "message": "call_to_action llegó vacío. No se puede renderizar sin CTA final.",
-                "expected_format": "CTA hablado breve tipo dilema, por ejemplo: ELIGE: RECORDAR / SOBREVIVIR",
+                "message": "call_to_action llegó vacío. Se recomienda enviar el CTA visual final fijo para POD.",
+                "expected_format": "SÍGUENOS PARA MÁS PALABRA DE DIOS CLARA",
             }
         )
 
@@ -1430,9 +1430,9 @@ def validate_cta_for_render(call_to_action: str) -> None:
         raise HTTPException(
             status_code=400,
             detail={
-                "message": "call_to_action es demasiado corto para detectar y renderizar una CTA final confiable.",
+                "message": "call_to_action es demasiado corto para renderizar CTA visual confiable.",
                 "call_to_action": text,
-                "expected_format": "CTA hablado breve con dilema o pregunta polarizante.",
+                "expected_format": "SÍGUENOS PARA MÁS PALABRA DE DIOS CLARA",
             }
         )
 
@@ -1973,8 +1973,8 @@ async def render_video(data: RenderRequest):
             detail=f"La fuente no existe en runtime: {RUNTIME_FONT_FILE}"
         )
 
-    # POD CTA is optional. If Make sends it empty, render a short visual CTA at the end.
-    effective_call_to_action = (data.call_to_action or "").strip() or "Síguenos para más Biblia clara"
+    # POD CTA is visual-only for POD. If Make sends it empty, render the fixed POD visual CTA at the end.
+    effective_call_to_action = (data.call_to_action or "").strip() or "SÍGUENOS PARA MÁS PALABRA DE DIOS CLARA"
 
     job_id = str(uuid.uuid4())
 
