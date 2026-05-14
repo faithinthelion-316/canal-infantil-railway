@@ -31,8 +31,8 @@ END_TAIL_DURATION = 0.0
 MIN_SCENE_DURATION = 0.5
 MAX_CLONE_PAD_PER_SCENE = 0.12
 
-HOOK_CARD_START = 0.12
-HOOK_CARD_END = 1.15
+HOOK_CARD_START = 0.00
+HOOK_CARD_END = 0.00
 
 HOOK_WORD_1_START = 0.12
 HOOK_WORD_2_START = 0.24
@@ -40,7 +40,7 @@ HOOK_WORD_3_START = 0.42
 
 REFERENCE_START_TIME = 6.0
 
-CTA_CARD_DURATION = 2.00
+CTA_CARD_DURATION = 0.00
 
 TRUTH_PUNCH_DURATION = 0.0
 
@@ -86,8 +86,8 @@ def get_hud_font_file() -> str:
 
 app.mount("/video", StaticFiles(directory=VIDEO_DIR), name="video")
 
-ASS_WHITE = r"\c&HFFF7F4&"  # #F4F7FF cold white, ASS BGR
-ASS_GOLD = r"\c&HFFE500&"   # #00E5FF neon cyan, ASS BGR
+ASS_WHITE = r"\c&HFFFFFF&"  # LBN white, ASS BGR
+ASS_GOLD = r"\c&H5AC1E6&"   # LBN warm gold, ASS BGR (#E6C15A)
 
 IMPACT_WORDS = {
     "MEMORIA",
@@ -1755,7 +1755,7 @@ def build_ass_dialogue_text(groups: list, active_index: int | None = None) -> st
 
         line_texts.append(" ".join(parts))
 
-    prefix = r"{\an2\fs72\bord4\shad0\fscx100\fscy100\fsp0" + ASS_WHITE + r"}"
+    prefix = r"{\an2\fs76\bord4\shad0\fscx100\fscy100\fsp0" + ASS_WHITE + r"}"
     return prefix + r"\N".join(line_texts)
 
 
@@ -1774,7 +1774,7 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,Bebas Neue,68,&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,4,0,2,80,80,250,1
+Style: Default,Bebas Neue,76,&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,4,0,2,80,80,285,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -1787,11 +1787,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             cue_start = float(cue["start"])
             cue_end = float(cue["end"])
 
-            if cue_start < HOOK_CARD_END:
-                continue
-
-            if cta_start_time is not None and cue_start >= cta_start_time:
-                continue
+            # POD no-card mode: captions start immediately and continue through the end.
+            # No hook cards, no CTA cards, no caption cutoff.
 
             if truth_punch_window is not None:
                 truth_start, truth_end = truth_punch_window
@@ -1923,9 +1920,9 @@ def health():
         "hook_word_1_start": HOOK_WORD_1_START,
         "hook_word_2_start": HOOK_WORD_2_START,
         "hook_word_3_start": HOOK_WORD_3_START,
-        "hook_card_mode": "compact_archivo_black_hud_3_hit_impact",
+        "hook_card_mode": "disabled_no_cards",
         "truth_punch_mode": "disabled_for_pod",
-        "cta_card_mode": "short_optional_pod_cta",
+        "cta_card_mode": "disabled_no_cards",
         "cta_detection_mode": "call_to_action_alignment_match_dynamic_long_cta",
         "reference_start_time": REFERENCE_START_TIME,
         "cta_card_duration": CTA_CARD_DURATION,
@@ -1973,8 +1970,8 @@ async def render_video(data: RenderRequest):
             detail=f"La fuente no existe en runtime: {RUNTIME_FONT_FILE}"
         )
 
-    # POD CTA is visual-only for POD. If Make sends it empty, render the fixed POD visual CTA at the end.
-    effective_call_to_action = (data.call_to_action or "").strip() or "SÍGUENOS PARA MÁS PALABRA DE DIOS CLARA"
+    # POD no-card mode: CTA is not rendered here. Keep field compatibility only.
+    effective_call_to_action = (data.call_to_action or "").strip()
 
     job_id = str(uuid.uuid4())
 
@@ -2126,47 +2123,24 @@ async def render_video(data: RenderRequest):
     safe_subtitles_path = escape_ffmpeg_path(subtitles_path)
     safe_fonts_dir = escape_ffmpeg_path(FONTS_DIR)
 
-    reference_filter = build_reference_filter(
-        data.referencia_biblica,
-        start_time=REFERENCE_START_TIME
-    )
+    # POD no-card mode: do not render reference stamps or any boxed metadata overlay.
+    reference_filter = ""
 
-    hook_text = data.hook_visual_text or data.hook or "NO ERA DINERO"
-    cta_label, cta_phrase = extract_cta_visual_parts(data.call_to_action, hook=data.hook, guion=data.guion)
-    cta_card_filters = build_cta_card_filters(
-        effective_call_to_action,
-        hook=data.hook,
-        guion=data.guion,
-        cta_start_time=cta_start_time,
-        final_duration=final_duration
-    )
-
-    incoming_truth_punch = clean_display_text(data.truth_punch_text, max_words=4)
-    resolved_truth_punch = incoming_truth_punch or extract_truth_punch_text(data.guion)
+    # POD no-card mode: no hook card, no truth-punch card, no CTA card.
+    # The visual language is only the avatar + dynamic captions.
+    hook_text = data.hook_visual_text or data.hook or ""
+    incoming_truth_punch = ""
+    resolved_truth_punch = ""
+    cta_card_filters = []
 
     print(
-        f"[{job_id}] CTA FILTER DEBUG: "
+        f"[{job_id}] POD NO-CARD MODE: "
         f"voice_duration={voice_duration:.2f}, "
         f"final_duration={final_duration:.2f}, "
-        f"cta_start_time={cta_start_time:.2f}, "
-        f"cta_label={cta_label}, "
-        f"cta_phrase={cta_phrase}, "
-        f"cta_filters_count={len(cta_card_filters)}",
+        f"captions=dynamic, "
+        f"cards=disabled",
         flush=True
     )
-
-    if not cta_card_filters:
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "message": "CTA card no fue generada. Se cancela render para evitar final vacío.",
-                "call_to_action": effective_call_to_action,
-                "cta_phrase": cta_phrase,
-                "cta_start_time": cta_start_time,
-                "final_duration": final_duration,
-                "font_exists": os.path.exists(RUNTIME_FONT_FILE),
-            }
-        )
 
     def compose_video_filter(prefix_filter: str = "") -> str:
         parts = []
@@ -2179,9 +2153,7 @@ async def render_video(data: RenderRequest):
 
         parts.append(f"subtitles={safe_subtitles_path}:fontsdir={safe_fonts_dir}")
 
-        parts.extend(build_hook_card_filters(hook_text))
-        # Truth punch blocks are disabled for POD. Emphasis should live inside captions.
-        parts.extend(cta_card_filters)
+        # POD no-card mode: do not render hook cards, CTA cards, or truth-punch cards.
 
         return ",".join(parts)
 
@@ -2394,9 +2366,9 @@ async def render_video(data: RenderRequest):
         "truth_punch_duration": TRUTH_PUNCH_DURATION,
         "truth_punch_start_time": truth_punch_window[0] if truth_punch_window else None,
         "truth_punch_end_time": truth_punch_window[1] if truth_punch_window else None,
-        "hook_card_mode": "compact_archivo_black_hud_3_hit_impact",
+        "hook_card_mode": "disabled_no_cards",
         "truth_punch_mode": "disabled_for_pod",
-        "cta_card_mode": "short_optional_pod_cta",
+        "cta_card_mode": "disabled_no_cards",
         "cta_detection_mode": "call_to_action_alignment_match_dynamic_long_cta",
         "hook_word_1_start": HOOK_WORD_1_START,
         "hook_word_2_start": HOOK_WORD_2_START,
