@@ -21,9 +21,9 @@ FONTS_DIR = os.path.join(BASE_DIR, "fonts")
 IMAGE_DIR = os.path.join(BASE_DIR, "images")
 CLIPS_DIR = os.path.join(BASE_DIR, "clips")
 
-MUSIC_FILE = "/app/music/background.mp3"
+MUSIC_FILE = "/app/music/background.mp3"  # optional for POD; render works without it
 
-END_TAIL_DURATION = 2.4
+END_TAIL_DURATION = 0.0
 
 # Video-tail policy:
 # Keep the music-only ending after the voice, but do not create that tail by
@@ -32,17 +32,17 @@ MIN_SCENE_DURATION = 0.5
 MAX_CLONE_PAD_PER_SCENE = 0.12
 
 HOOK_CARD_START = 0.12
-HOOK_CARD_END = 2.20
+HOOK_CARD_END = 1.15
 
 HOOK_WORD_1_START = 0.12
-HOOK_WORD_2_START = 0.30
-HOOK_WORD_3_START = 0.55
+HOOK_WORD_2_START = 0.24
+HOOK_WORD_3_START = 0.42
 
 REFERENCE_START_TIME = 6.0
 
-CTA_CARD_DURATION = 2.75
+CTA_CARD_DURATION = 2.00
 
-TRUTH_PUNCH_DURATION = 2.15
+TRUTH_PUNCH_DURATION = 0.0
 
 AI_VIDEO_READABILITY_FILTER = "eq=contrast=1.04:saturation=1.10"
 
@@ -58,17 +58,15 @@ os.makedirs(CLIPS_DIR, exist_ok=True)
 
 APP_FONTS_DIR = "/app/fonts"
 
-# Space Grotesk remains the clean UI/metadata/subtitle font.
-APP_FONT_FILE = os.path.join(APP_FONTS_DIR, "SpaceGrotesk.ttf")
-RUNTIME_FONT_FILE = os.path.join(FONTS_DIR, "SpaceGrotesk.ttf")
+# POD TikTok captions use the bundled Bebas Neue font.
+APP_FONT_FILE = os.path.join(APP_FONTS_DIR, "BebasNeue-Regular.ttf")
+RUNTIME_FONT_FILE = os.path.join(FONTS_DIR, "BebasNeue-Regular.ttf")
 
-# Archivo Black is used only for large impact HUD text: hook, truth punch, CTA.
-# If it is not present in the repository, the renderer safely falls back to Space Grotesk.
+# Use the same font for hook, punch, CTA and captions unless another impact font is added later.
 APP_HUD_FONT_CANDIDATES = [
-    os.path.join(APP_FONTS_DIR, "ArchivoBlack-Regular.ttf"),
-    os.path.join(APP_FONTS_DIR, "ArchivoBlack.ttf"),
+    os.path.join(APP_FONTS_DIR, "BebasNeue-Regular.ttf"),
 ]
-RUNTIME_HUD_FONT_FILE = os.path.join(FONTS_DIR, "ArchivoBlack-Regular.ttf")
+RUNTIME_HUD_FONT_FILE = os.path.join(FONTS_DIR, "BebasNeue-Regular.ttf")
 
 if os.path.exists(APP_FONT_FILE) and not os.path.exists(RUNTIME_FONT_FILE):
     shutil.copy(APP_FONT_FILE, RUNTIME_FONT_FILE)
@@ -1757,7 +1755,7 @@ def build_ass_dialogue_text(groups: list, active_index: int | None = None) -> st
 
         line_texts.append(" ".join(parts))
 
-    prefix = r"{\an2\fs64\bord3\shad0\fscx100\fscy100\fsp0" + ASS_WHITE + r"}"
+    prefix = r"{\an2\fs72\bord4\shad0\fscx100\fscy100\fsp0" + ASS_WHITE + r"}"
     return prefix + r"\N".join(line_texts)
 
 
@@ -1776,7 +1774,7 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,Space Grotesk,64,&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,3,0,2,80,80,300,1
+Style: Default,Bebas Neue,68,&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,4,0,2,80,80,250,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -1918,7 +1916,7 @@ def health():
         "music_exists": os.path.exists(MUSIC_FILE),
         "music_path": MUSIC_FILE,
         "end_tail_duration": END_TAIL_DURATION,
-        "scene_duration_mode": "capacity_aware_distribution_no_long_freeze",
+        "scene_duration_mode": "pod_single_avatar_video_no_tail",
         "max_clone_pad_per_scene": MAX_CLONE_PAD_PER_SCENE,
         "hook_card_start": HOOK_CARD_START,
         "hook_card_end": HOOK_CARD_END,
@@ -1926,17 +1924,17 @@ def health():
         "hook_word_2_start": HOOK_WORD_2_START,
         "hook_word_3_start": HOOK_WORD_3_START,
         "hook_card_mode": "compact_archivo_black_hud_3_hit_impact",
-        "truth_punch_mode": "compact_archivo_black_truth_punch",
-        "cta_card_mode": "centered_archivo_black_long_polarizing_cta",
+        "truth_punch_mode": "disabled_for_pod",
+        "cta_card_mode": "short_optional_pod_cta",
         "cta_detection_mode": "call_to_action_alignment_match_dynamic_long_cta",
         "reference_start_time": REFERENCE_START_TIME,
         "cta_card_duration": CTA_CARD_DURATION,
         "truth_punch_duration": TRUTH_PUNCH_DURATION,
-        "music_required": True,
-        "cta_card_required": True,
+        "music_required": False,
+        "cta_card_required": False,
         "voice_starts_at": "0.00s",
         "sfx_enabled": False,
-        "render_style": "futuristic_megacity_hud_5_scene_cinematic",
+        "render_style": "pod_tiktok_avatar_captioned",
     }
 
 
@@ -1954,6 +1952,7 @@ class RenderRequest(BaseModel):
     referencia_biblica: str = ""
 
     video_url: str = ""
+    video_url_1: str = ""
     video_url_2: str = ""
     video_url_3: str = ""
     video_url_4: str = ""
@@ -1974,7 +1973,8 @@ async def render_video(data: RenderRequest):
             detail=f"La fuente no existe en runtime: {RUNTIME_FONT_FILE}"
         )
 
-    validate_cta_for_render(data.call_to_action)
+    # POD CTA is optional. If Make sends it empty, render a short visual CTA at the end.
+    effective_call_to_action = (data.call_to_action or "").strip() or "Síguenos para más Biblia clara"
 
     job_id = str(uuid.uuid4())
 
@@ -1995,7 +1995,8 @@ async def render_video(data: RenderRequest):
     with open(input_audio_path, "wb") as f:
         f.write(audio_bytes)
 
-    speed_factor = 1.3
+    # POD avatar video is generated from the same ElevenLabs audio. Do not speed it up or lipsync will drift.
+    speed_factor = 1.0
 
     normalize_cmd = [
         "ffmpeg",
@@ -2032,56 +2033,52 @@ async def render_video(data: RenderRequest):
     # ElevenLabs word alignment using the actual call_to_action text.
     cta_start_time = round(max(0.0, voice_duration - 2.4), 3)
 
-    if not os.path.exists(MUSIC_FILE):
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "message": "MUSIC_FILE no existe. El render no debe producir cola final en silencio.",
-                "music_path": MUSIC_FILE,
-            }
-        )
+    # POD render: music is optional. If /app/music/background.mp3 exists, mix it quietly.
+    # If it does not exist, preserve the voice audio only.
+    if os.path.exists(MUSIC_FILE):
+        mix_cmd = [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel", "error",
+            "-y",
+            "-stream_loop", "-1",
+            "-i", MUSIC_FILE,
+            "-i", voice_audio_path,
+            "-filter_complex",
+            (
+                f"[0:a]volume=0.10,"
+                f"atrim=0:{final_duration:.2f},"
+                f"asetpts=PTS-STARTPTS,"
+                f"afade=t=out:st={max(0.0, final_duration - 0.5):.2f}:d=0.5[bg];"
+                f"[1:a]volume=1.0,"
+                f"apad=pad_dur={END_TAIL_DURATION},"
+                f"atrim=0:{final_duration:.2f},"
+                f"asetpts=PTS-STARTPTS[voice];"
+                f"[bg][voice]amix=inputs=2:duration=longest:dropout_transition=0,"
+                f"atrim=0:{final_duration:.2f}[aout]"
+            ),
+            "-map", "[aout]",
+            "-c:a", "libmp3lame",
+            "-b:a", "192k",
+            "-ar", "44100",
+            "-ac", "2",
+            final_audio_path
+        ]
 
-    mix_cmd = [
-        "ffmpeg",
-        "-hide_banner",
-        "-loglevel", "error",
-        "-y",
-        "-stream_loop", "-1",
-        "-i", MUSIC_FILE,
-        "-i", voice_audio_path,
-        "-filter_complex",
-        (
-            f"[0:a]volume=0.24,"
-            f"atrim=0:{final_duration:.2f},"
-            f"asetpts=PTS-STARTPTS,"
-            f"afade=t=out:st={max(0.0, final_duration - 0.8):.2f}:d=0.8[bg];"
-            f"[1:a]volume=1.4,"
-            f"apad=pad_dur={END_TAIL_DURATION},"
-            f"atrim=0:{final_duration:.2f},"
-            f"asetpts=PTS-STARTPTS[voice];"
-            f"[bg][voice]amix=inputs=2:duration=longest:dropout_transition=0,"
-            f"atrim=0:{final_duration:.2f}[aout]"
-        ),
-        "-map", "[aout]",
-        "-c:a", "libmp3lame",
-        "-b:a", "192k",
-        "-ar", "44100",
-        "-ac", "2",
-        final_audio_path
-    ]
+        mix_result = subprocess.run(mix_cmd, capture_output=True, text=True)
 
-    mix_result = subprocess.run(mix_cmd, capture_output=True, text=True)
-
-    if mix_result.returncode != 0 or not os.path.exists(final_audio_path):
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "message": "Error mezclando audio final",
-                "returncode": mix_result.returncode,
-                "stdout": mix_result.stdout,
-                "stderr": mix_result.stderr,
-            }
-        )
+        if mix_result.returncode != 0 or not os.path.exists(final_audio_path):
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "message": "Error mezclando audio final",
+                    "returncode": mix_result.returncode,
+                    "stdout": mix_result.stdout,
+                    "stderr": mix_result.stderr,
+                }
+            )
+    else:
+        shutil.copy(voice_audio_path, final_audio_path)
 
     final_audio_duration = round(get_audio_duration(final_audio_path), 3)
 
@@ -2111,14 +2108,14 @@ async def render_video(data: RenderRequest):
     cta_start_time = round(
         find_sequence_start_in_words(
             words=words,
-            target_text=data.call_to_action,
+            target_text=effective_call_to_action,
             fallback_time=max(0.0, voice_duration - 2.4)
         ),
         3
     )
 
-    cues = group_words_into_cues(words, max_words=4, max_chars=26)
-    truth_punch_window = compute_truth_punch_window(voice_duration)
+    cues = group_words_into_cues(words, max_words=3, max_chars=22)
+    truth_punch_window = None
     write_ass_subtitles(
         subtitles_path,
         cues,
@@ -2137,7 +2134,7 @@ async def render_video(data: RenderRequest):
     hook_text = data.hook_visual_text or data.hook or "NO ERA DINERO"
     cta_label, cta_phrase = extract_cta_visual_parts(data.call_to_action, hook=data.hook, guion=data.guion)
     cta_card_filters = build_cta_card_filters(
-        data.call_to_action,
+        effective_call_to_action,
         hook=data.hook,
         guion=data.guion,
         cta_start_time=cta_start_time,
@@ -2163,7 +2160,7 @@ async def render_video(data: RenderRequest):
             status_code=500,
             detail={
                 "message": "CTA card no fue generada. Se cancela render para evitar final vacío.",
-                "call_to_action": data.call_to_action,
+                "call_to_action": effective_call_to_action,
                 "cta_phrase": cta_phrase,
                 "cta_start_time": cta_start_time,
                 "final_duration": final_duration,
@@ -2183,25 +2180,27 @@ async def render_video(data: RenderRequest):
         parts.append(f"subtitles={safe_subtitles_path}:fontsdir={safe_fonts_dir}")
 
         parts.extend(build_hook_card_filters(hook_text))
-        parts.extend(
-            build_truth_punch_filters(
-                data.guion,
-                voice_duration,
-                truth_punch_text=resolved_truth_punch
-            )
-        )
+        # Truth punch blocks are disabled for POD. Emphasis should live inside captions.
         parts.extend(cta_card_filters)
 
         return ",".join(parts)
 
-    video_urls = []
-    for url in [
-        data.video_url,
+    # Forward-compatible media logic:
+    # - Current POD: send only video_url (single avatar video).
+    # - Future POD multi-clip: send video_url_1..video_url_5. If video_url_1 exists,
+    #   the renderer ignores video_url and uses the numbered clip set.
+    numbered_video_urls = [
+        data.video_url_1,
         data.video_url_2,
         data.video_url_3,
         data.video_url_4,
         data.video_url_5,
-    ]:
+    ]
+    has_numbered_clips = any(url and url.strip() for url in numbered_video_urls)
+    candidate_video_urls = numbered_video_urls if has_numbered_clips else [data.video_url]
+
+    video_urls = []
+    for url in candidate_video_urls:
         if url and url.strip():
             video_urls.append(url.strip())
 
@@ -2363,7 +2362,7 @@ async def render_video(data: RenderRequest):
 
     base_url = os.environ.get(
         "BASE_URL",
-        "https://ffmpeg-render-api-production-1143.up.railway.app"
+        "https://ffmpeg-render-api-productionpod.up.railway.app"
     )
 
     return {
@@ -2374,19 +2373,20 @@ async def render_video(data: RenderRequest):
         "audio_duration": final_audio_duration,
         "final_duration": final_duration,
         "end_tail_duration": END_TAIL_DURATION,
-        "scene_duration_mode": "capacity_aware_distribution_no_long_freeze",
+        "scene_duration_mode": "pod_single_avatar_video_no_tail",
         "max_clone_pad_per_scene": MAX_CLONE_PAD_PER_SCENE,
         "cta_start_time": cta_start_time,
         "subtitles_mode_received": data.subtitles_mode,
         "render_mode": render_mode,
         "cues_count": len(cues),
         "speed_factor": speed_factor,
-        "music_used": True,
+        "music_used": os.path.exists(MUSIC_FILE),
         "media_count": media_count,
         "referencia_biblica_used": bool(data.referencia_biblica and data.referencia_biblica.strip()),
         "hook_received": bool(data.hook and data.hook.strip()),
         "hook_visual_text_received": bool(data.hook_visual_text and data.hook_visual_text.strip()),
         "call_to_action_received": bool(data.call_to_action and data.call_to_action.strip()),
+        "effective_call_to_action": effective_call_to_action,
         "cta_visual_label": cta_label,
         "cta_visual_phrase": cta_phrase,
         "truth_punch_text": resolved_truth_punch,
@@ -2395,15 +2395,15 @@ async def render_video(data: RenderRequest):
         "truth_punch_start_time": truth_punch_window[0] if truth_punch_window else None,
         "truth_punch_end_time": truth_punch_window[1] if truth_punch_window else None,
         "hook_card_mode": "compact_archivo_black_hud_3_hit_impact",
-        "truth_punch_mode": "compact_archivo_black_truth_punch",
-        "cta_card_mode": "centered_archivo_black_long_polarizing_cta",
+        "truth_punch_mode": "disabled_for_pod",
+        "cta_card_mode": "short_optional_pod_cta",
         "cta_detection_mode": "call_to_action_alignment_match_dynamic_long_cta",
         "hook_word_1_start": HOOK_WORD_1_START,
         "hook_word_2_start": HOOK_WORD_2_START,
         "hook_word_3_start": HOOK_WORD_3_START,
         "voice_starts_at": "0.00s",
         "sfx_enabled": False,
-        "music_required": True,
-        "cta_card_required": True,
-        "render_style": "futuristic_megacity_hud_5_scene_cinematic",
+        "music_required": False,
+        "cta_card_required": False,
+        "render_style": "pod_tiktok_avatar_captioned",
     }
