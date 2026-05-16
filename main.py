@@ -1465,6 +1465,164 @@ def speed_up_alignment(alignment: dict, speed: float) -> dict:
     }
 
 
+
+AUDIO_TAG_PHRASE_PATTERNS = [
+    ["TONO", "SERIO"],
+    ["TONO", "PASTORAL"],
+    ["TONO", "INTIMO"],
+    ["TONO", "ÍNTIMO"],
+    ["TONO", "BAJO"],
+    ["ENFASIS", "SUAVE"],
+    ["ÉNFASIS", "SUAVE"],
+    ["PAUSA", "BREVE"],
+    ["PAUSA", "CORTA"],
+    ["PAUSA", "LARGA"],
+    ["MAS", "BAJO"],
+    ["MÁS", "BAJO"],
+    ["SUSURRO"],
+    ["RESPIRA"],
+    ["RESPIRACION"],
+    ["RESPIRACIÓN"],
+]
+
+
+def strip_audio_tags_from_text(value: str) -> str:
+    """
+    Removes delivery/audio directions before they can become subtitles.
+
+    ElevenLabs v3 can interpret bracketed delivery notes, but when we request
+    timestamps those notes can leak into the alignment and then into captions.
+    The renderer is the final guardrail: captions must contain only spoken script.
+    """
+    text = str(value or "")
+    text = re.sub(r"\[[^\]\n]{1,80}\]", " ", text)
+    text = re.sub(r"\([^\)\n]*(tono|pausa|énfasis|enfasis|susurro|respira)[^\)\n]*\)", " ", text, flags=re.IGNORECASE)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+def strip_audio_tags_from_alignment(alignment: dict) -> dict:
+    """
+    Removes characters inside bracketed audio tags from ElevenLabs alignment.
+    Keeps timestamps for the actual spoken text intact.
+    """
+    characters = alignment.get("characters", []) or []
+    starts = alignment.get("character_start_times_seconds", []) or []
+    ends = alignment.get("character_end_times_seconds", []) or []
+
+    new_chars = []
+    new_starts = []
+    new_ends = []
+    inside_square_tag = False
+    inside_round_tag = False
+    round_buffer = []
+
+    for ch, st, en in zip(characters, starts, ends):
+        ch_str = str(ch)
+
+        if ch_str == "[":
+            inside_square_tag = True
+            continue
+        if ch_str == "]":
+            inside_square_tag = False
+            continue
+        if inside_square_tag:
+            continue
+
+        if ch_str == "(":
+            inside_round_tag = True
+            round_buffer = []
+            continue
+        if ch_str == ")" and inside_round_tag:
+            tag_text = "".join(round_buffer).lower()
+            inside_round_tag = False
+            round_buffer = []
+            if any(token in tag_text for token in ["tono", "pausa", "énfasis", "enfasis", "susurro", "respira"]):
+                continue
+            continue
+        if inside_round_tag:
+            round_buffer.append(ch_str)
+            continue
+
+        new_chars.append(ch_str)
+        new_starts.append(st)
+        new_ends.append(en)
+
+    return {
+        "characters": new_chars,
+        "character_start_times_seconds": new_starts,
+        "character_end_times_seconds": new_ends,
+    }
+
+
+def filter_caption_words(words: list) -> list:
+    """Drops leaked delivery-direction phrases such as TONO SERIO or PAUSA BREVE."""
+    if not words:
+        return []
+
+    clean_words = []
+    i = 0
+
+    while i < len(words):
+        matched = False
+
+        for pattern in AUDIO_TAG_PHRASE_PATTERNS:
+            pattern_norm = [normalize_token(x) for x in pattern]
+            candidate_norm = [
+                normalize_token(words[i + j].get("word", ""))
+                for j in range(len(pattern))
+                if i + j < len(words)
+            ]
+
+            if len(candidate_norm) == len(pattern_norm) and candidate_norm == pattern_norm:
+                i += len(pattern)
+                matched = True
+                break
+
+        if matched:
+            continue
+
+        word_value = str(words[i].get("word", "")).strip()
+        if word_value in {"[", "]", "(", ")", "{", "}"}:
+            i += 1
+            continue
+
+        # Remove single-token bracket remnants such as [TONO or SERIO]
+        if word_value.startswith("[") or word_value.endswith("]"):
+            i += 1
+            continue
+
+        clean_words.append(words[i])
+        i += 1
+
+    return clean_words
+
+
+def clamp_caption_word_timings(words: list, max_word_duration: float = 0.72) -> list:
+    """Prevents one malformed timestamp from freezing a caption for several seconds."""
+    cleaned = []
+    for item in words:
+        try:
+            start = float(item.get("start", 0.0))
+            end = float(item.get("end", start + 0.25))
+        except Exception:
+            continue
+
+        if end <= start:
+            end = start + 0.25
+
+        if end - start > max_word_duration:
+            end = start + max_word_duration
+
+        cleaned.append({
+            "word": str(item.get("word", "")),
+            "start": start,
+            "end": end,
+        })
+
+    return cleaned
+
+
 def build_words_from_alignment(alignment: dict) -> list:
     characters = alignment.get("characters", [])
     starts = alignment.get("character_start_times_seconds", [])
@@ -1706,6 +1864,15 @@ def group_words_into_cues(words: list, max_words: int = 4, max_chars: int = 26) 
         if cue["end"] - cue["start"] < 0.35:
             cue["end"] = cue["start"] + 0.35
 
+        # Defensive cap: captions should pulse quickly. If ElevenLabs returns
+        # a malformed long timestamp, do not freeze a phrase for several seconds.
+        if cue["end"] - cue["start"] > 1.65:
+            cue["end"] = cue["start"] + 1.65
+
+        for word in cue.get("words", []):
+            if float(word.get("end", 0)) > cue["end"]:
+                word["end"] = cue["end"]
+
     return cues
 
 
@@ -1932,6 +2099,7 @@ def health():
         "voice_starts_at": "0.00s",
         "sfx_enabled": False,
         "render_style": "pod_tiktok_avatar_captioned",
+        "caption_guardrails": "strip_audio_tags_and_cap_long_timestamps",
     }
 
 
@@ -2100,8 +2268,12 @@ async def render_video(data: RenderRequest):
         flush=True
     )
 
-    adjusted_alignment = speed_up_alignment(data.normalized_alignment, speed_factor)
+    # Final caption guardrail: strip any delivery tags that leaked into ElevenLabs alignment.
+    safe_alignment = strip_audio_tags_from_alignment(data.normalized_alignment)
+    adjusted_alignment = speed_up_alignment(safe_alignment, speed_factor)
     words = build_words_from_alignment(adjusted_alignment)
+    words = filter_caption_words(words)
+    words = clamp_caption_word_timings(words)
 
     # Important: keep cta_start_time=None. In POD mode there is no final CTA
     # card, so subtitles must not be cut off near the last 2-3 seconds.
